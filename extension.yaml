@@ -1,0 +1,91 @@
+name: storage-chat-over-docs
+version: 0.0.1
+specVersion: v1beta
+
+displayName: PaLM Chat Over Docs in Storage
+description: Allows you to ask questions 
+
+license: Apache-2.0 # The license you want for the extension
+
+author:
+  authorName: Firebase
+  url: https://firebase.google.com
+
+sourceUrl: https://github.com
+
+billingRequired: true
+
+roles:
+  - role: storage.admin
+    reason: Allows the extension to ingest documents from Cloud Storage
+  - role: aiplatform.user
+    reason: Allows the extension to access the PaLM APIs
+  - role: datastore.user
+    reason: Allows the extension to write updates to the database.
+    
+resources:
+  - name: ingester
+    type: firebaseextensions.v1beta.function
+    description: Ingests documents uploaded to storage into the vector database
+    properties:
+      runtime: python311
+      availableMemoryMb: 2048
+      eventTrigger:
+        eventType: google.storage.object.finalize
+        resource: projects/_/buckets/${param:DOCS_BUCKET}
+  - name: firestorechatbot
+    type: firebaseextensions.v1beta.function
+    description:
+      Listens for document changes in your Firestore collection and write chat responses.
+    properties:
+      runtime: python311
+      availableMemoryMb: 2048
+      eventTrigger:
+        eventType: providers/cloud.firestore/eventTypes/document.write
+        resource: projects/${param:PROJECT_ID}/databases/(default)/documents/${param:COLLECTION_PATH}/{documentId}
+
+params:
+  - param: DOCS_BUCKET
+    label: Cloud Storage bucket for documents
+    description: >
+      To which Cloud Storage bucket will you upload documents that you want to search over?
+    type: selectResource
+    resourceType: storage.googleapis.com/Bucket
+    example: my-project-12345.appspot.com
+    validationRegex: ^([0-9a-z_.-]*)$
+    validationErrorMessage: Invalid storage bucket
+    default: ${STORAGE_BUCKET}
+    required: true
+  - param: PINECONE_API_KEY
+    label: Pinecone API Key
+    description: Pinecone API Key
+    type: string
+    required: true
+  - param: PINECONE_ENV
+    label: Pinecone Env
+    description: Pinecone Env
+    type: string
+    required: true
+  - param: PINECONE_INDEX
+    label: Pinecone Index
+    description: Name of the Pinecone Index to use (make sure it 768 dimentions)
+    type: string
+    required: true
+  - param: GENAI_API_KEY
+    label: PaLM API Key
+    description: PaLM API Key
+    type: string
+    required: true
+  - param: COLLECTION_PATH
+    label: Collection path
+    description: >-
+      What is the path of the collection that you would like to use for the chattbot? You may
+      use `{wildcard}` notation to match a subcollection of all documents in a
+      collection (for example: `chatrooms/{chatid}/posts`). Parent Firestore Document IDs from `{wildcards}` 
+      can be returned in `path_params` as a JSON formatted string.
+    type: string
+    example: chat
+    validationRegex: "^[^/]+(/[^/]+/[^/]+)*$"
+    validationErrorMessage: Firestore collection paths must be an odd number of segments separated by slashes, e.g. "path/to/collection".
+    default: chat
+    required: true
